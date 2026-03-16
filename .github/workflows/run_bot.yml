@@ -3,7 +3,7 @@ name: Run podcast summary bot
 on:
   workflow_dispatch:
   schedule:
-    - cron: '7,37 5-17 * * *'
+    - cron: '7,17,27,37,47,57 5-17 * * *'
 
 permissions:
   contents: write
@@ -32,6 +32,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Create YouTube cookies file
+        run: |
+          cat > youtube_cookies.txt <<'EOF'
+          ${{ secrets.YOUTUBE_COOKIES }}
+          EOF
+
       - name: Run bot
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
@@ -41,6 +47,7 @@ jobs:
           CHANNEL_HANDLES: ${{ vars.CHANNEL_HANDLES }}
           TRANSCRIBE_MODEL: small
           FORCE_REPOST: false
+          YTDLP_COOKIE_FILE: youtube_cookies.txt
           PUBLISH_HOUR_START_MSK: 8
           PUBLISH_HOUR_END_MSK: 21
         run: python -m app.main

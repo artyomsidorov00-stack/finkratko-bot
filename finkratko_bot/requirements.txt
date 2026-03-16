@@ -1,0 +1,7 @@
+google-api-python-client
+yt-dlp
+faster-whisper
+requests
+transformers
+sentencepiece
+torch

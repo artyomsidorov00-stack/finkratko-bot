@@ -17,6 +17,7 @@ class AudioTranscriber:
     def download_audio(self, video_id: str) -> str:
         url = f"https://www.youtube.com/watch?v={video_id}"
         outtmpl = os.path.join(str(self.download_dir), f"{video_id}.%(ext)s")
+
         ydl_opts = {
             "format": "bestaudio/best",
             "outtmpl": outtmpl,
@@ -24,6 +25,11 @@ class AudioTranscriber:
             "no_warnings": True,
             "noplaylist": True,
         }
+
+        cookie_file = os.environ.get("YTDLP_COOKIE_FILE", "").strip()
+        if cookie_file and os.path.exists(cookie_file):
+            ydl_opts["cookiefile"] = cookie_file
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             return ydl.prepare_filename(info)

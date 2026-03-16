@@ -1,5 +1,5 @@
 google-api-python-client
-yt-dlp
+yt-dlp==2025.12.08
 faster-whisper
 requests
 transformers

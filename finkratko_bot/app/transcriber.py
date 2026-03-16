@@ -17,7 +17,7 @@ class AudioTranscriber:
     def _base_ydl_opts(self, video_id: str) -> dict:
         outtmpl = os.path.join(str(self.download_dir), f"{video_id}.%(ext)s")
 
-        ydl_opts = {
+        return {
             "outtmpl": outtmpl,
             "quiet": True,
             "no_warnings": True,
@@ -29,12 +29,6 @@ class AudioTranscriber:
             },
         }
 
-        cookie_file = os.environ.get("YTDLP_COOKIE_FILE", "").strip()
-        if cookie_file and os.path.exists(cookie_file):
-            ydl_opts["cookiefile"] = cookie_file
-
-        return ydl_opts
-
     def _find_downloaded_file(self, video_id: str) -> str | None:
         possible_exts = ["mp3", "m4a", "webm", "mp4", "opus", "wav"]
         for ext in possible_exts:
@@ -43,10 +37,8 @@ class AudioTranscriber:
                 return candidate
         return None
 
-    def download_audio(self, video_id: str) -> str:
-        url = f"https://www.youtube.com/watch?v={video_id}"
-
-        download_variants = [
+    def _download_with_opts(self, url: str, video_id: str, use_cookies: bool):
+        variants = [
             {
                 "format": "ba/b",
                 "postprocessors": [
@@ -81,10 +73,15 @@ class AudioTranscriber:
 
         last_error = None
 
-        for variant in download_variants:
+        for variant in variants:
             try:
                 ydl_opts = self._base_ydl_opts(video_id)
                 ydl_opts.update(variant)
+
+                if use_cookies:
+                    cookie_file = os.environ.get("YTDLP_COOKIE_FILE", "").strip()
+                    if cookie_file and os.path.exists(cookie_file):
+                        ydl_opts["cookiefile"] = cookie_file
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.extract_info(url, download=True)
@@ -95,9 +92,35 @@ class AudioTranscriber:
 
             except Exception as e:
                 last_error = e
-                print(f"Не удалось скачать вариант {variant['format']}: {e}")
+                mode = "с cookies" if use_cookies else "без cookies"
+                print(f"Не удалось скачать вариант {variant['format']} {mode}: {e}")
 
         raise last_error
+
+    def download_audio(self, video_id: str) -> str:
+        url = f"https://www.youtube.com/watch?v={video_id}"
+
+        # 1. Сначала пробуем без cookies
+        try:
+            return self._download_with_opts(url, video_id, use_cookies=False)
+        except Exception as e_no_cookie:
+            msg = str(e_no_cookie).lower()
+
+            # 2. Только если похоже на блокировку YouTube — пробуем с cookies
+            trigger_words = [
+                "sign in to confirm you're not a bot",
+                "login required",
+                "confirm you're not a bot",
+                "use --cookies",
+                "cookies"
+            ]
+
+            if any(word in msg for word in trigger_words):
+                print("Пробуем повторно скачать с cookies...")
+                return self._download_with_opts(url, video_id, use_cookies=True)
+
+            # Если ошибка не про авторизацию, отдаем исходную
+            raise e_no_cookie
 
     def transcribe(self, video_id: str, clean_fn) -> list[dict]:
         audio_path = self.download_audio(video_id)

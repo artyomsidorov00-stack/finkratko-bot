@@ -14,15 +14,19 @@ class AudioTranscriber:
         self.delete_after_run = delete_after_run
         self.download_dir.mkdir(parents=True, exist_ok=True)
 
-    def _build_ydl_opts(self, video_id: str, format_string: str) -> dict:
+    def _base_ydl_opts(self, video_id: str) -> dict:
         outtmpl = os.path.join(str(self.download_dir), f"{video_id}.%(ext)s")
 
         ydl_opts = {
-            "format": format_string,
             "outtmpl": outtmpl,
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android", "web"]
+                }
+            },
         }
 
         cookie_file = os.environ.get("YTDLP_COOKIE_FILE", "").strip()
@@ -31,29 +35,67 @@ class AudioTranscriber:
 
         return ydl_opts
 
+    def _find_downloaded_file(self, video_id: str) -> str | None:
+        possible_exts = ["mp3", "m4a", "webm", "mp4", "opus", "wav"]
+        for ext in possible_exts:
+            candidate = os.path.join(str(self.download_dir), f"{video_id}.{ext}")
+            if os.path.exists(candidate):
+                return candidate
+        return None
+
     def download_audio(self, video_id: str) -> str:
         url = f"https://www.youtube.com/watch?v={video_id}"
 
-        # Пробуем несколько вариантов форматов по очереди.
-        format_candidates = [
-            "bestaudio*/bestaudio/best",
-            "bestaudio/best",
-            "best",
+        download_variants = [
+            {
+                "format": "ba/b",
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "192",
+                    }
+                ],
+            },
+            {
+                "format": "bestaudio/best",
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "192",
+                    }
+                ],
+            },
+            {
+                "format": "best",
+                "postprocessors": [
+                    {
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": "mp3",
+                        "preferredquality": "192",
+                    }
+                ],
+            },
         ]
 
         last_error = None
 
-        for format_string in format_candidates:
+        for variant in download_variants:
             try:
-                ydl_opts = self._build_ydl_opts(video_id, format_string)
+                ydl_opts = self._base_ydl_opts(video_id)
+                ydl_opts.update(variant)
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    return ydl.prepare_filename(info)
+                    ydl.extract_info(url, download=True)
+
+                downloaded = self._find_downloaded_file(video_id)
+                if downloaded:
+                    return downloaded
 
             except Exception as e:
                 last_error = e
-                print(f"Не удалось скачать формат {format_string}: {e}")
+                print(f"Не удалось скачать вариант {variant['format']}: {e}")
 
         raise last_error
 

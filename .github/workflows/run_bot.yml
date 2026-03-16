@@ -1,0 +1,54 @@
+name: Run podcast summary bot
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '7,37 5-17 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: finkratko_bot
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run bot
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          OWN_CHANNEL_URL: ${{ secrets.OWN_CHANNEL_URL }}
+          CHANNEL_HANDLES: ${{ vars.CHANNEL_HANDLES }}
+          TRANSCRIBE_MODEL: small
+          FORCE_REPOST: false
+          PUBLISH_HOUR_START_MSK: 8
+          PUBLISH_HOUR_END_MSK: 21
+        run: python -m app.main
+
+      - name: Commit updated state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/state.json data/pending_queue.json data/feedback.jsonl data/normalization_rules.json debug_reports/*.json || true
+          git diff --cached --quiet || git commit -m "chore: update bot state"
+          git push
